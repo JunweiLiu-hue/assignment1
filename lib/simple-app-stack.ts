@@ -4,7 +4,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as custom from "aws-cdk-lib/custom-resources";
 import { generateBatch } from "../shared/util";
-import {movies} from "../seed/movies";
+import { movies } from "../seed/movies";
 
 import { Construct } from 'constructs';
 
@@ -43,7 +43,7 @@ export class SimpleAppStack extends cdk.Stack {
             [moviesTable.tableName]: generateBatch(movies),
           },
         },
-        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"), //.of(Date.now().toString()),
+        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"),
       },
       policy: custom.AwsCustomResourcePolicy.fromSdkCalls({
         resources: [moviesTable.tableArn],
@@ -75,10 +75,31 @@ export class SimpleAppStack extends cdk.Stack {
       },
     });
 
-    moviesTable.grantReadData(getMovieByIdFn)
+    moviesTable.grantReadData(getMovieByIdFn);
 
     new cdk.CfnOutput(this, "Get Movie Function Url", { value: getMovieByIdURL.url });
 
+    const listMoviesFn = new lambdanode.NodejsFunction(this, "ListMoviesFn", {
+      architecture: lambda.Architecture.ARM_64,
+      runtime: lambda.Runtime.NODEJS_18_X,
+      entry: `${__dirname}/../lambdas/listMovies.ts`,
+      timeout: cdk.Duration.seconds(10),
+      memorySize: 128,
+      environment: {
+        TABLE_NAME: moviesTable.tableName,
+        REGION: 'eu-west-1',
+      },
+    });
+
+    const listMoviesURL = listMoviesFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      cors: {
+        allowedOrigins: ["*"],
+      },
+    });
+
+    moviesTable.grantReadData(listMoviesFn);
+
+    new cdk.CfnOutput(this, "List Movies Function Url", { value: listMoviesURL.url });
   }
 }
-

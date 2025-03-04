@@ -25,6 +25,7 @@ export const handler: Handler = async (event, context) => {
         Key: { id: movieId },
       })
     );
+    console.log('GetCommand response: ', commandOutput)
     if (!commandOutput.Item) {
       return {
         statusCode: 404,
