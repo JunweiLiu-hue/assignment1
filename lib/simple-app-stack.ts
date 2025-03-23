@@ -12,28 +12,20 @@ export class SimpleAppStack extends cdk.Stack {
     super(scope, id, props);
 
     const booksTable = new dynamodb.Table(this, 'BooksTable', {
-      tableName: 'BooksTable',
       partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'sortKey', type: dynamodb.AttributeType.STRING },
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
     const listBooksFn = new NodejsFunction(this, 'ListBooksFunction', {
-      entry: path.join(__dirname, '../lambdas/listBooks.ts'), 
+      entry: path.join(__dirname, '../lambdas/listBooks.ts'),
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_16_X,
       environment: {
         TABLE_NAME: booksTable.tableName,
       },
     });
-
     booksTable.grantReadData(listBooksFn);
-
-    const api = new apigateway.RestApi(this, 'BooksApi', {
-      restApiName: 'Books Service',
-    });
-
-    const booksResource = api.root.addResource('books');
-    booksResource.addMethod('GET', new apigateway.LambdaIntegration(listBooksFn));
 
     const createBookFn = new NodejsFunction(this, 'CreateBookFunction', {
       entry: path.join(__dirname, '../lambdas/createBook.ts'),
@@ -42,12 +34,32 @@ export class SimpleAppStack extends cdk.Stack {
       environment: {
         TABLE_NAME: booksTable.tableName,
       },
-    })
-    
-    booksTable.grantWriteData(createBookFn)
-    
-    booksResource.addMethod('POST', new apigateway.LambdaIntegration(createBookFn))
-  }
+    });
+    booksTable.grantWriteData(createBookFn);
 
+    const getBookFn = new NodejsFunction(this, 'GetBookByIdFunction', {
+      entry: path.join(__dirname, '../lambdas/getBookById.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_16_X,
+      environment: {
+        TABLE_NAME: booksTable.tableName,
+      },
+    });
+    booksTable.grantReadData(getBookFn);
+
+    const api = new apigateway.RestApi(this, 'BooksApi', {
+      restApiName: 'Books Service',
+    });
+
+    const booksResource = api.root.addResource('books');
+    booksResource.addMethod('GET', new apigateway.LambdaIntegration(listBooksFn));
+    booksResource.addMethod('POST', new apigateway.LambdaIntegration(createBookFn));
+    const bookByIdResource = booksResource.addResource('{id}');
+    bookByIdResource.addMethod('GET', new apigateway.LambdaIntegration(getBookFn));
+
+    new cdk.CfnOutput(this, 'BooksTableName', {
+      value: booksTable.tableName,
+    });
+  }
   
 }
