@@ -6,6 +6,7 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as path from 'path';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as iam from 'aws-cdk-lib/aws-iam';
 
 export class SimpleAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -67,6 +68,24 @@ export class SimpleAppStack extends cdk.Stack {
     });
     booksTable.grantWriteData(updateBookFn);
     bookByIdResource.addMethod('PUT', new apigateway.LambdaIntegration(updateBookFn));
+
+    const translateFn = new NodejsFunction(this, 'TranslateFunction', {
+      entry: path.join(__dirname, '../lambdas/translate.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_16_X,
+      environment: {},
+    });
+    
+    translateFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['translate:*'],
+        resources: ['*'],
+      })
+    );
+    
+    const translateResource = api.root.addResource('translate');
+    translateResource.addMethod('POST', new apigateway.LambdaIntegration(translateFn));
+    
   }
   
 }
