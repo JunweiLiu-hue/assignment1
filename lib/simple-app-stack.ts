@@ -1,140 +1,38 @@
 import * as cdk from 'aws-cdk-lib';
-import * as lambdanode from 'aws-cdk-lib/aws-lambda-nodejs';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
-import * as custom from "aws-cdk-lib/custom-resources";
-import { generateBatch } from "../shared/util";
-import { movies, movieCasts } from "../seed/movies";
-
 import { Construct } from 'constructs';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import { RemovalPolicy } from 'aws-cdk-lib';
+import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as path from 'path';
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 
 export class SimpleAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const simpleFn = new lambdanode.NodejsFunction(this, "SimpleFn", {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/simple.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
+    const booksTable = new dynamodb.Table(this, 'BooksTable', {
+      tableName: 'BooksTable',
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    const simpleFnURL = simpleFn.addFunctionUrl({
-      authType: lambda.FunctionUrlAuthType.AWS_IAM,
-      cors: { allowedOrigins: ["*"] },
-    });
-
-    const moviesTable = new dynamodb.Table(this, "MoviesTable", {
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      partitionKey: { name: "id", type: dynamodb.AttributeType.NUMBER },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      tableName: "Movies",
-    });
-
-    const movieCastsTable = new dynamodb.Table(this, "MovieCastTable", {
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      partitionKey: { name: "movieId", type: dynamodb.AttributeType.NUMBER },
-      sortKey: { name: "actorName", type: dynamodb.AttributeType.STRING },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      tableName: "MovieCast",
-    });
-
-    movieCastsTable.addLocalSecondaryIndex({
-      indexName: "roleIx",
-      sortKey: { name: "roleName", type: dynamodb.AttributeType.STRING },
-    });
-
-    new custom.AwsCustomResource(this, "moviesAndCastsInitData", {
-      onCreate: {
-        service: "DynamoDB",
-        action: "batchWriteItem",
-        parameters: {
-          RequestItems: {
-            [moviesTable.tableName]: generateBatch(movies),          
-            [movieCastsTable.tableName]: generateBatch(movieCasts),  
-          },
-        },
-        physicalResourceId: custom.PhysicalResourceId.of("moviesAndCastsInitData"),
-      },
-      policy: custom.AwsCustomResourcePolicy.fromSdkCalls({
-        resources: [moviesTable.tableArn, movieCastsTable.tableArn],
-      }),
-    });
-
-    new cdk.CfnOutput(this, "Simple Function Url", { value: simpleFnURL.url });
-
-    const getMovieByIdFn = new lambdanode.NodejsFunction(this, "GetMovieByIdFn", {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/getMovieById.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
+    const listBooksFn = new NodejsFunction(this, 'ListBooksFunction', {
+      entry: path.join(__dirname, '../lambdas/listBooks.ts'), // ✅ 直接引用 .ts 源码
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_16_X,
       environment: {
-        TABLE_NAME: moviesTable.tableName,
-        REGION: 'eu-west-1',
+        TABLE_NAME: booksTable.tableName,
       },
     });
 
-    const getMovieByIdURL = getMovieByIdFn.addFunctionUrl({
-      authType: lambda.FunctionUrlAuthType.NONE,
-      cors: { allowedOrigins: ["*"] },
+    booksTable.grantReadData(listBooksFn);
+
+    const api = new apigateway.RestApi(this, 'BooksApi', {
+      restApiName: 'Books Service',
     });
 
-    moviesTable.grantReadData(getMovieByIdFn);
-
-    new cdk.CfnOutput(this, "Get Movie Function Url", { value: getMovieByIdURL.url });
-
-    const listMoviesFn = new lambdanode.NodejsFunction(this, "ListMoviesFn", {
-      architecture: lambda.Architecture.ARM_64,
-      runtime: lambda.Runtime.NODEJS_18_X,
-      entry: `${__dirname}/../lambdas/listMovies.ts`,
-      timeout: cdk.Duration.seconds(10),
-      memorySize: 128,
-      environment: {
-        TABLE_NAME: moviesTable.tableName,
-        REGION: 'eu-west-1',
-      },
-    });
-
-    const listMoviesURL = listMoviesFn.addFunctionUrl({
-      authType: lambda.FunctionUrlAuthType.NONE,
-      cors: { allowedOrigins: ["*"] },
-    });
-
-    moviesTable.grantReadData(listMoviesFn);
-
-    const getMovieCastMembersFn = new lambdanode.NodejsFunction(
-      this,
-      "GetCastMemberFn",
-      {
-        architecture: lambda.Architecture.ARM_64,
-        runtime: lambda.Runtime.NODEJS_18_X, 
-        entry: `${__dirname}/../lambdas/getMovieCastMembers.ts`,
-        timeout: cdk.Duration.seconds(10),
-        memorySize: 128,
-        environment: {
-          CAST_TABLE_NAME: movieCastsTable.tableName,
-          REGION: "eu-west-1",
-        },
-      }
-    );
-    
-    const getMovieCastMembersURL = getMovieCastMembersFn.addFunctionUrl({
-      authType: lambda.FunctionUrlAuthType.NONE,
-      cors: {
-        allowedOrigins: ["*"],
-      },
-    });
-    
-    movieCastsTable.grantReadData(getMovieCastMembersFn);
-    
-    new cdk.CfnOutput(this, "Get Movie Cast Url", {
-      value: getMovieCastMembersURL.url,
-    });
-    
-    
-
-    new cdk.CfnOutput(this, "List Movies Function Url", { value: listMoviesURL.url });
+    const booksResource = api.root.addResource('books');
+    booksResource.addMethod('GET', new apigateway.LambdaIntegration(listBooksFn));
   }
 }
