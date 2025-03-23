@@ -18,7 +18,7 @@ export class SimpleAppStack extends cdk.Stack {
     });
 
     const listBooksFn = new NodejsFunction(this, 'ListBooksFunction', {
-      entry: path.join(__dirname, '../lambdas/listBooks.ts'), // ✅ 直接引用 .ts 源码
+      entry: path.join(__dirname, '../lambdas/listBooks.ts'), 
       handler: 'handler',
       runtime: lambda.Runtime.NODEJS_16_X,
       environment: {
@@ -34,5 +34,20 @@ export class SimpleAppStack extends cdk.Stack {
 
     const booksResource = api.root.addResource('books');
     booksResource.addMethod('GET', new apigateway.LambdaIntegration(listBooksFn));
+
+    const createBookFn = new NodejsFunction(this, 'CreateBookFunction', {
+      entry: path.join(__dirname, '../lambdas/createBook.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_16_X,
+      environment: {
+        TABLE_NAME: booksTable.tableName,
+      },
+    })
+    
+    booksTable.grantWriteData(createBookFn)
+    
+    booksResource.addMethod('POST', new apigateway.LambdaIntegration(createBookFn))
   }
+
+  
 }
