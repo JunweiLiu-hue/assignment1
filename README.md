@@ -6,80 +6,102 @@ __Demo:__ ... link to your YouTube video demonstration ......
 
 ### Context.
 
-State the context you chose for your web API and detail the attributes of the DynamoDB table items, e.g.
-
-Context: Movie Cast
+Context: Book Management System
 
 Table item attributes:
-+ MovieID - number  (Partition key)
-+ ActorID - number  (Sort Key)
-+ RoleName - string
-+ RoleDescription - string
-+ AwardsWon - List<string>
-+ etc
+
+BookID - string (Partition key)
+
+Genre - string (Sort key)
+
+Title - string
+
+Author - string
+
+Summary - string
+
+PublishedYear - number
+
+Rating - number
+
+Translations - map (key: language, value: translated summary)
 
 ### App API endpoints.
 
 [ Provide a bullet-point list of the app's endpoints (excluding the Auth API) you have successfully implemented. ]
 e.g.
  
-+ POST /thing - add a new 'thing'.
-+ GET /thing/{partition-key}/ - Get all the 'things' with a specified partition key.
-+ GEtT/thing/{partition-key}?attributeX=value - Get all the 'things' with a specified partition key value and its attributeX satisfying the condition .....
-+ etc
+POST /books - Add a new book to the system.
+
+GET /books/{bookID}/{genre} - Get details of a specific book by its bookID and genre.
+
+GET /books/{bookID}/{genre}/translation - Get the translated summary of the book in a specified language (returns cached translation if available).
+
+GET /books/{bookID}/{genre}/translation?language=fr - Get the translated summary of the book in French.
+
+PUT /books/{bookID}/{genre} - Update book details (e.g., summary, rating).
+
+GET /books - Get a list of all books in the system.
 
 
 ### Features.
 
 #### Translation persistence (if completed)
 
-[ Explain briefly your solution to the translation persistence requirement - no code excerpts required. Show the structure of a table item that includes review translations, e.g.
+Translation persistence
+The translation persistence feature caches the translations of book summaries in DynamoDB. When a user requests a translation for a book, the system checks DynamoDB first for a cached version. If the translation exists, it returns the cached result; if not, it fetches the translation from Amazon Translate and stores the result in the table for future use.
 
-+ MovieID - number  (Partition key)
-+ ActorID - number  (Sort Key)
-+ RoleName - string
-+ RoleDescription - string
-+ AwardsWon - List<string>
-+ Translations - ?
-]
+Table item attributes include:
+
+BookID - string (Partition key)
+
+Genre - string (Sort Key)
+
+Title - string
+
+Author - string
+
+Summary - string
+
+PublishedYear - number
+
+Rating - number
+
+Translations - map (key: language, value: translated summary)
 
 #### Custom L2 Construct (if completed)
-
-[State briefly the infrastructure provisioned by your custom L2 construct. Show the structure of its input props object and list the public properties it exposes, e.g. taken from the Cognito lab,
-
 Construct Input props object:
-~~~
-type AuthApiProps = {
- userPoolId: string;
- userPoolClientId: string;
+
+type BooksApiProps = {
+  apiKey: string;
+  tableName: string;
 }
-~~~
-Construct public properties
-~~~
-export class MyConstruct extends Construct {
- public  PropertyName: type
- etc.
-~~~
- ]
-
-#### Multi-Stack app (if completed)
-
-[Explain briefly the stack composition of your app - no code excerpts required.]
-
-#### Lambda Layers (if completed)
-
-[Explain briefly where you used the Layers feature of the AWS Lambda service - no code excerpts required.]
 
 
 #### API Keys. (if completed)
 
-[Explain briefly how to implement API key authentication to protect API Gateway endpoints. Include code excerpts from your app to support this. ][]
+To secure access to certain API endpoints, API key authentication is used. The API Gateway enforces the requirement for an API key on specific routes like POST /books and PUT /books.
 
-~~~ts
-// This is a code excerpt markdown 
-let foo : string = 'Foo'
-console.log(foo)
-~~~
+Implementation of API Key authentication:
+
+const apiKey = api.addApiKey('BooksApiKey');
+const usagePlan = api.addUsagePlan('BooksUsagePlan', {
+  name: 'BooksUsagePlan',
+  throttle: {
+    rateLimit: 10,
+    burstLimit: 2,
+  },
+});
+
+usagePlan.addApiKey(apiKey);
+usagePlan.addApiStage({
+  stage: api.deploymentStage,
+});
+
+const booksResource = api.root.addResource('books');
+booksResource.addMethod('POST', new apigateway.LambdaIntegration(createBookFn), {
+  apiKeyRequired: true,
+});
 
 ###  Extra (If relevant).
 
