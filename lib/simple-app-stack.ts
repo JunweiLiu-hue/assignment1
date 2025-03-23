@@ -50,11 +50,14 @@ export class SimpleAppStack extends cdk.Stack {
 
     const api = new apigateway.RestApi(this, 'BooksApi', {
       restApiName: 'Books Service',
+      apiKeySourceType: apigateway.ApiKeySourceType.HEADER, 
     });
 
     const booksResource = api.root.addResource('books');
     booksResource.addMethod('GET', new apigateway.LambdaIntegration(listBooksFn));
-    booksResource.addMethod('POST', new apigateway.LambdaIntegration(createBookFn));
+    booksResource.addMethod('POST', new apigateway.LambdaIntegration(createBookFn), {
+      apiKeyRequired: true, 
+    });
     const bookByIdResource = booksResource.addResource('{id}');
     bookByIdResource.addMethod('GET', new apigateway.LambdaIntegration(getBookFn));
 
@@ -67,7 +70,9 @@ export class SimpleAppStack extends cdk.Stack {
       },
     });
     booksTable.grantWriteData(updateBookFn);
-    bookByIdResource.addMethod('PUT', new apigateway.LambdaIntegration(updateBookFn));
+    bookByIdResource.addMethod('PUT', new apigateway.LambdaIntegration(updateBookFn), {
+      apiKeyRequired: true, 
+    });
 
     const translateFn = new NodejsFunction(this, 'TranslateFunction', {
       entry: path.join(__dirname, '../lambdas/translate.ts'),
