@@ -57,9 +57,16 @@ export class SimpleAppStack extends cdk.Stack {
     const bookByIdResource = booksResource.addResource('{id}');
     bookByIdResource.addMethod('GET', new apigateway.LambdaIntegration(getBookFn));
 
-    new cdk.CfnOutput(this, 'BooksTableName', {
-      value: booksTable.tableName,
+    const updateBookFn = new NodejsFunction(this, 'UpdateBookFunction', {
+      entry: path.join(__dirname, '../lambdas/updateBook.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_16_X,
+      environment: {
+        TABLE_NAME: booksTable.tableName,
+      },
     });
+    booksTable.grantWriteData(updateBookFn);
+    bookByIdResource.addMethod('PUT', new apigateway.LambdaIntegration(updateBookFn));
   }
   
 }
